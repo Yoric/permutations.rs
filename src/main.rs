@@ -1,16 +1,30 @@
 use std::env::*;
 use std::iter::*;
-use std::marker::*;
 
 fn main() {
     let args : Vec<_> = std::env::args().collect();
     let word : String = args[1].clone();
-    println!("Anagrams of {:?}", word);
+    println!("Permutations of {:?}", word);
 
     let letters = word.into();
+/*
     for anagram in anagrams(letters) {
         println!("{:?}", String::from_utf8(anagram).unwrap());
     }
+*/
+
+    let mut count = 0;
+    let mut iterator = PermutationGenerator::new(letters);
+    loop {
+        if let Some(anagram) = iterator.next() {
+            count += 1;
+            println!("{:?}", String::from_utf8_lossy(anagram));
+        } else {
+            break;
+        }
+    }
+
+    println!("Generated {} permutations", count);
 }
 
 
@@ -49,7 +63,7 @@ fn anagrams<T>(letters: Vec<T>) -> Vec<Vec<T>> where T: Clone {
 
 // Implementation of memory-constant lazy cloning.
 
-struct AnagramIterator<'a, T> where T: 'a {
+struct PermutationGenerator<T>{
     /// The original vector.
     source: Vec<T>,
 
@@ -65,45 +79,45 @@ struct AnagramIterator<'a, T> where T: 'a {
     ///  indices[indices.len() - 1] ranges over [0, indices.len() - 1]
     indices: Vec<usize>,
     latest: Vec<T>,
+    started: bool,
     done: bool,
-    phantom: PhantomData<&'a T>
 }
 
-impl<'a, T> AnagramIterator<'a, T> where T: Clone {
+impl<T> PermutationGenerator<T> where T: Clone {
     fn new(source: Vec<T>) -> Self {
         let len = source.len();
 
         let mut latest = Vec::with_capacity(len);
         for i in 0 .. len {
-            latest[i] = source[i].clone()
+            latest.push(source[i].clone());
         }
 
         let mut indices = Vec::with_capacity(len);
         indices.resize(len, 0);
 
-        AnagramIterator {
+        PermutationGenerator {
+            started: false,
             done: false,
             source: source,
             indices: indices,
             latest: latest,
-            phantom: PhantomData,
         }
-    }
-
-    fn get(&'a self) -> &'a Vec<T> {
-        &self.latest
     }
 }
 
-impl<'a, T> Iterator for AnagramIterator<'a, T> where T: Clone {
-    type Item = ();
-    fn next(&mut self) -> Option<()> {
+impl<'a, T> PermutationGenerator<T> where T: Clone {
+    fn next(&'a mut self) -> Option<&'a Vec<T>> {
         if self.done {
             return None;
         }
 
+        if !self.started {
+            self.started = true;
+            return Some(&self.latest);
+        }
+
         let len = self.source.len();
-        
+
         // Increase indices
         let mut done = true;
         for i in 0 .. len {
@@ -116,12 +130,7 @@ impl<'a, T> Iterator for AnagramIterator<'a, T> where T: Clone {
                 break;
             }
         }
-
-        if done {
-            self.done = true;
-            return None;
-        }
-
+        
         // Prepare result
         for i in 0 .. len {
             self.latest[i] = self.source[i].clone();
@@ -132,10 +141,18 @@ impl<'a, T> Iterator for AnagramIterator<'a, T> where T: Clone {
             let delta = self.indices[len - 1 - i]; // In 0 .. len - i - 1
             self.latest.swap(i, i + delta);
         }
+        
 
-        Some(())
+        if done {
+            self.done = true;
+            return None;
+        }
+
+
+        Some(&self.latest)
     }
 }
+
 
 #[test]
 fn it_works() {
