@@ -1,19 +1,22 @@
 use std::env::*;
 use std::iter::*;
+use std::process::exit;
 
 fn main() {
     let args : Vec<_> = std::env::args().collect();
+
+    if args.len() <= 1 {
+        println!("Usage: anagrams word");
+        std::process::exit(0);
+    }
+    
     let word : String = args[1].clone();
     println!("Permutations of {:?}", word);
 
-    let letters = word.into();
-/*
-    for anagram in anagrams(letters) {
-        println!("{:?}", String::from_utf8(anagram).unwrap());
-    }
-*/
-
     let mut count = 0;
+
+    let letters = word.into();
+
     let mut iterator = PermutationGenerator::new(letters);
     loop {
         if let Some(anagram) = iterator.next() {
@@ -28,42 +31,9 @@ fn main() {
 }
 
 
-// Implementation of eager cloning.
-
-fn cloneMinus<T>(original: &Vec<T>, index: usize) -> Vec<T> where T: Clone {
-    let mut dest = Vec::with_capacity(original.len() - 1);
-    for i in 0 .. original.len() {
-        if i == index {
-            continue;
-        }
-        dest.push(original[i].clone());
-    }
-    dest
-}
-
-fn anagrams<T>(letters: Vec<T>) -> Vec<Vec<T>> where T: Clone {
-    if letters.len() <= 1 {
-        return vec![letters];
-    }
-    let mut result = Vec::new();
-    for i in 0 .. letters.len() {
-        let letter = letters[i].clone();
-        let subset = cloneMinus(&letters, i);
-        let anagrams = anagrams(subset);
-        for anagram in anagrams {
-            for j in 0 .. anagram.len() {
-                let mut copy = anagram.clone();
-                copy.insert(j, letter.clone());
-                result.push(copy.clone());
-            }
-        }
-    }
-    result
-}
-
 // Implementation of memory-constant lazy cloning.
 
-struct PermutationGenerator<T>{
+pub struct PermutationGenerator<T>{
     /// The original vector.
     source: Vec<T>,
 
@@ -84,7 +54,7 @@ struct PermutationGenerator<T>{
 }
 
 impl<T> PermutationGenerator<T> where T: Clone {
-    fn new(source: Vec<T>) -> Self {
+    pub fn new(source: Vec<T>) -> Self {
         let len = source.len();
 
         let mut latest = Vec::with_capacity(len);
@@ -107,16 +77,24 @@ impl<T> PermutationGenerator<T> where T: Clone {
 
 impl<'a, T> PermutationGenerator<T> where T: Clone {
     fn next(&'a mut self) -> Option<&'a Vec<T>> {
+        // Edge case: are we done yet?
         if self.done {
             return None;
         }
 
+        // Edge case: is there anything to do?
+        let len = self.source.len();
+
+        if len == 0 {
+            return None;
+        }
+
+        // Edge case: are we even started?
         if !self.started {
             self.started = true;
             return Some(&self.latest);
         }
 
-        let len = self.source.len();
 
         // Increase indices
         let mut done = true;
@@ -154,6 +132,43 @@ impl<'a, T> PermutationGenerator<T> where T: Clone {
 }
 
 
-#[test]
-fn it_works() {
+/// Test that we have the right permutations for "abc"
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::hash::Hash;
+    use std::collections::HashSet;
+
+    fn lazy_to_set<T>(letters: Vec<T>) -> HashSet<Vec<T>> where T: Clone + Eq + Hash + Ord {
+        let reference = letters.clone().sort();
+        let mut iterator = PermutationGenerator::new(letters);
+        let mut permutations = HashSet::new();
+        loop {
+            if let Some(anagram) = iterator.next() {
+                // Make sure that our anagrams use the right letters, with the right multiplicity.
+                let sorted = anagram.clone().sort();
+                assert_eq!(sorted, reference);
+
+                // Make sure that our anagrams are distinct. Won't work if the same letter appears
+                // more than once in `letters`.
+                let fresh = permutations.insert(anagram.clone());
+                assert!(fresh);
+            } else {
+                break;
+            }
+        }
+        permutations
+    }
+    
+    #[test]
+    fn test_abcde() {
+        let permutations = lazy_to_set("abcde".into());
+        assert_eq!(permutations.len(), 120);
+    }
+
+    #[test]
+    fn test_empty() {
+        let permutations = lazy_to_set("".into());
+        assert_eq!(permutations.len(), 0);
+    }
 }
